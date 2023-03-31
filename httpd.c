@@ -31,38 +31,6 @@ void execute_cgi(int, const char *, const char*, const char *);
 void bad_request(int);
 void cannot_execute(int);
 
-
-int main(void){
-    int server_sock = -1;
-    uint16_t port = 0;
-    int client_sock = -1;
-    int costnum = 0;
-    struct sockaddr_in client_name;
-    int client_name_len = sizeof(client_name);
-
-    server_sock = startup(&port);
-    printf("httpd running on port %d\n", port);
-
-    while(1){
-        client_sock = accept(server_sock, (struct sockaddr *)&client_name, &client_name_len);
-        costnum++;
-        printf("%d", costnum);
-        if(client_sock == -1){
-            error_die("accept");
-        }
-        accept_request(client_sock);
-    }
-
-    close(server_sock);
-
-    return(0);
-
-
-
-    
-
-}
-
 /**********************************************************************/
 /* This function starts the process of listening for web connections
  * on a specified port.  If the port is 0, then dynamically allocate a
@@ -133,7 +101,7 @@ void accept_request(int client){
     int cgi = 0;
     char *query_string = NULL;
 
-    numchars = getline(client, buf, sizeof(buf));
+    numchars = get_line(client, buf, sizeof(buf));
     i = 0;
     j = 0;
     while(!ISspace(buf[j]) && ( i < sizeof(method) - 1))
@@ -526,6 +494,37 @@ void cannot_execute(int client)
     sprintf(buf, "<P>Error prohibited CGI execution.\r\n");
     send(client, buf, strlen(buf), 0);
 }
+
+int main(void){
+    int server_sock = -1;
+    uint16_t port = 0;
+    int client_sock = -1;
+    int costnum = 0;
+    struct sockaddr_in client_name;
+    socklen_t client_name_len = sizeof(client_name);
+
+    server_sock = startup(&port);
+    printf("httpd running on port %d\n", port);
+
+    while(1){
+        client_sock = accept(server_sock,
+                       (struct sockaddr *)&client_name,
+                       &client_name_len);
+        costnum++;
+        if(client_sock == -1){
+            error_die("accept");
+        }
+        accept_request(client_sock);
+        close(client_sock);
+    }
+
+    close(server_sock);
+
+    return(0);
+
+}
+
+
 
 
 
