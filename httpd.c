@@ -11,12 +11,16 @@
 #include <sys/wait.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <sys/time.h>
+
+#include <errno.h>
 
 #define ISspace(x) isspace((int)(x))
 
 #define SERVER_STRING "Server: jdbhttpd/0.1.0\r\n"
 //typedef __u_short u_short;
 #define _XOPEN_SOURCE 500
+#define LINE_ENDING "\r\n"
 
 int startup(uint16_t *);
 void error_die(const char *);
@@ -209,6 +213,12 @@ int get_line(int sock, char *buf, int size)
     char c = '\0';
     int n;
 
+    //设置超时时间
+    struct timeval timeout;
+    timeout.tv_sec = 5;
+    timeout.tv_usec = 0;
+    setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (const char*)&timeout, sizeof(timeout));
+
     while((i < size - 1) && (c != '\n'))
     {
         n = recv(sock, &c, 1, 0);
@@ -227,6 +237,16 @@ int get_line(int sock, char *buf, int size)
             }
             buf[i] = c;
             i++;
+        }
+        //处理错误码
+        else if (n == -1){
+            if (errno == EINTR || errno == EAGAIN)
+            {
+                continue;
+            }
+            else{
+                break;
+            }
         }
         else{
             c = '\n';
