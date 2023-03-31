@@ -1,0 +1,13 @@
+{
+    "files.associations": {
+        "inet.h": "c",
+        "socket.h": "c",
+        "in.h": "c",
+        "types.h": "c",
+        "wait.h": "c",
+        "*.tcc": "c",
+        "string": "c",
+        "istream": "c",
+        "streambuf": "c"
+    }
+}
