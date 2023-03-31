@@ -106,6 +106,7 @@ void accept_request(int client){
     char *query_string = NULL;
 
     numchars = get_line(client, buf, sizeof(buf));
+    printf("this is get line: %s", buf);
     i = 0;
     j = 0;
     while(!ISspace(buf[j]) && ( i < sizeof(method) - 1))
@@ -130,13 +131,14 @@ void accept_request(int client){
     {
         j++;
     }
-    while (ISspace(buf[j]) && (i < sizeof(url) -1) && (j < sizeof(buf)))
+    while (!ISspace(buf[j]) && (i < sizeof(url) -1) && (j < sizeof(buf)))
     {
         url[i] = buf[j];
         i++;
         j++;
     }
     url[i] = '\0';
+    printf("the url is %s\n", url);
     if (strcasecmp(method, "GET") == 0)
     {
         query_string = url;
@@ -155,10 +157,11 @@ void accept_request(int client){
         }
     }
     sprintf(path, "htdocs%s", url);
+    printf("the path is %s\n", path);
     
     if (path[strlen(path) -1] == '/')
     {
-        strcat(path, "register.html");
+        strcat(path, "index.html");
     }
     if (stat(path, &st) == -1){
         while ((numchars > 0) && strcmp("\n", buf))
