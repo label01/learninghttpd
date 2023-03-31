@@ -15,9 +15,10 @@
 #define ISspace(x) isspace((int)(x))
 
 #define SERVER_STRING "Server: jdbhttpd/0.1.0\r\n"
-typedef __u_short u_short;
+//typedef __u_short u_short;
+#define _XOPEN_SOURCE 500
 
-int startup(u_short *);
+int startup(uint16_t *);
 void error_die(const char *);
 void accept_request(int);
 int get_line(int, char *, int);
@@ -33,7 +34,7 @@ void cannot_execute(int);
 
 int main(void){
     int server_sock = -1;
-    u_short port = 0;
+    uint16_t port = 0;
     int client_sock = -1;
     int costnum = 0;
     struct sockaddr_in client_name;
@@ -51,7 +52,7 @@ int main(void){
         }
         accept_request(client_sock);
     }
-    
+
     close(server_sock);
 
     return(0);
@@ -70,38 +71,38 @@ int main(void){
  * Parameters: pointer to variable containing the port to connect on
  * Returns: the socket */
 /**********************************************************************/
-int startup(u_short *port)
+int startup(uint16_t *port)
 {
-    int httpd = 0;
-    struct sockaddr_in name;
+    int server_socket = 0;
+    struct sockaddr_in server_addr;
 
-    httpd = socket(PF_INET, SOCK_STREAM, 0);
-    if (httpd == -1)
+    server_socket = socket(PF_INET, SOCK_STREAM, 0);
+    if (server_socket == -1)
     {
         error_die("socket");
     }
-    memset(&name, 0, sizeof(name));
-    name.sin_family = AF_INET;
-    name.sin_port = htons(*port);
-    name.sin_addr.s_addr = htonl(INADDR_ANY);
-    if (bind(httpd, (struct sockaddr *)&name, sizeof(name)) < 0)
+    memset(&server_addr, 0, sizeof(server_addr));
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_port = htons(*port);
+    server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    if (bind(server_socket, (struct sockaddr *)&server_addr, sizeof(server_addr)) == -1)
     {
         error_die("bind");
     }
     if (*port == 0)
     {
-        int namelen = sizeof(name);
-        if(getsockname(httpd, (struct sockaddr *)&name, &namelen) == -1)
+        socklen_t server_len = sizeof(server_addr);
+        if(getsockname(server_socket, (struct sockaddr *)&server_addr, &server_len) == -1)
         {
             error_die("getsockname");
         }
-        *port = ntohs(name.sin_port);
+        *port = ntohs(server_addr.sin_port);
     }
-    if (listen(httpd, 5) < 0)
+    if (listen(server_socket, 5) == -1)
     {
         error_die("listen");
     }
-    return(httpd);    
+    return(server_socket);    
         
 
 }
@@ -120,6 +121,7 @@ void error_die(const char *sc){
  * Parameters: the socket connected to the client */
 /**********************************************************************/
 void accept_request(int client){
+    printf("enter accept_request");
     char buf[1024];
     int numchars;
     char method[255];
