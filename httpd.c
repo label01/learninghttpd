@@ -22,6 +22,13 @@
 #define _XOPEN_SOURCE 500
 #define LINE_ENDING "\r\n"
 
+//为了提高accept_request的可读性，增加如下宏定义
+#define MAX_REQUEST_SIZE 8192
+#define MAX_METHOD_SIZE 255
+#define MAX_URL_SIZE 2048
+#define MAX_PATH_SIZE 4096
+
+
 int startup(uint16_t *);
 void error_die(const char *);
 void accept_request(int);
@@ -92,33 +99,44 @@ void error_die(const char *sc){
  * return.  Process the request appropriately.
  * Parameters: the socket connected to the client */
 /**********************************************************************/
-void accept_request(int client){
+void accept_request(int client_fd){
     printf("enter accept_request");
-    char buf[1024];
-    int numchars;
-    char method[255];
-    char url[255];
-    char path[512];
+
+    char request[MAX_REQUEST_SIZE];
+    //初始化request字符串
+    memset(request, 0, MAX_REQUEST_SIZE);
+    
+    //从客户端读取请求
+    ssize_t request_len = get_line(client_fd, request, sizeof(request));
+    if (request_len < 0){
+        perror("Failed to receive request");
+        return;
+    }
+    char method[MAX_METHOD_SIZE];
+    char url[MAX_URL_SIZE];
+    char path[MAX_PATH_SIZE];
+
+    memset(method, 0, MAX_METHOD_SIZE);
+    memset(url, 0, MAX_URL_SIZE);
+    memset(path, 0, MAX_PATH_SIZE);
+
     size_t i, j;
     struct stat st;
     /*becomes true if server decides this is a CGI program*/
     int cgi = 0;
     char *query_string = NULL;
-
-    numchars = get_line(client, buf, sizeof(buf));
-    printf("this is get line: %s", buf);
     i = 0;
     j = 0;
-    while(!ISspace(buf[j]) && ( i < sizeof(method) - 1))
+    while(!ISspace(request[j]) && ( i < sizeof(method) - 1))
     {
-        method[i] = buf[j];
+        method[i] = request[j];
         i++;
         j++;
     }
     method[i] = '\0';
     if (strcasecmp(method, "GET") && strcasecmp(method, "POST"))
     {
-        unimplemented(client);
+        unimplemented(client_fd);
         return;
     }
 
@@ -127,18 +145,17 @@ void accept_request(int client){
         cgi = 1;
     }
     i = 0;
-    while (ISspace(buf[j]) && (j < sizeof(buf)))
+    while (ISspace(request[j]) && (j < sizeof(request)))
     {
         j++;
     }
-    while (!ISspace(buf[j]) && (i < sizeof(url) -1) && (j < sizeof(buf)))
+    while (!ISspace(request[j]) && (i < sizeof(url) -1) && (j < sizeof(request)))
     {
-        url[i] = buf[j];
+        url[i] = request[j];
         i++;
         j++;
     }
     url[i] = '\0';
-    printf("the url is %s\n", url);
     if (strcasecmp(method, "GET") == 0)
     {
         query_string = url;
@@ -157,18 +174,17 @@ void accept_request(int client){
         }
     }
     sprintf(path, "htdocs%s", url);
-    printf("the path is %s\n", path);
     
     if (path[strlen(path) -1] == '/')
     {
         strcat(path, "index.html");
     }
     if (stat(path, &st) == -1){
-        while ((numchars > 0) && strcmp("\n", buf))
+        while ((request_len > 0) && strcmp("\n", request))
         {
-            numchars = get_line(client, buf, sizeof(buf));
+            request_len = get_line(client_fd, request, sizeof(request));
         }
-        not_found(client);
+        not_found(client_fd);
     }
     else{
         if ((st.st_mode & S_IFMT) == S_IFDIR)
@@ -183,17 +199,14 @@ void accept_request(int client){
         }
         if (!cgi)
         {
-            serve_file(client, path);
+            serve_file(client_fd, path);
         }
         else{
-            execute_cgi(client, path, method, query_string);
+            execute_cgi(client_fd, path, method, query_string);
         }
-        close(client);
+        close(client_fd);
 
     }
-    
-
-
 
 }
 
