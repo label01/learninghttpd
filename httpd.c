@@ -109,7 +109,7 @@ void accept_request(int client_fd){
     //从客户端读取请求
     ssize_t request_len = get_line(client_fd, request, sizeof(request));
     if (request_len < 0){
-        perror("Failed to receive request");
+        perror("Failed to receive request\n");
         return;
     }
     char method[MAX_METHOD_SIZE];
@@ -134,6 +134,7 @@ void accept_request(int client_fd){
         j++;
     }
     method[i] = '\0';
+    //printf("the method is %s\n", method);
     if (strcasecmp(method, "GET") && strcasecmp(method, "POST"))
     {
         unimplemented(client_fd);
@@ -142,6 +143,7 @@ void accept_request(int client_fd){
 
     if (strcasecmp(method, "POST") == 0)
     {
+        printf("this is post ,cgi = 1\n");
         cgi = 1;
     }
     i = 0;
@@ -156,6 +158,8 @@ void accept_request(int client_fd){
         j++;
     }
     url[i] = '\0';
+    //printf("the url is %s\n", url);
+    //处理查询字符
     if (strcasecmp(method, "GET") == 0)
     {
         query_string = url;
@@ -168,12 +172,15 @@ void accept_request(int client_fd){
         }
         if (*query_string == '?')
         {
+            //printf("enter GET, the cgi = 1\n");
             cgi = 1;
             *query_string = '\0';
             query_string++;
         }
+        
     }
     sprintf(path, "htdocs%s", url);
+    //printf("the sprintf string is  %s\n", path);
     
     if (path[strlen(path) -1] == '/')
     {
@@ -334,6 +341,7 @@ void not_found(int client){
 /**********************************************************************/
 void serve_file(int client, const char *filename)
 {
+    printf("enter the serve file\n");
     FILE *resource = NULL;
     int numchars = 1;
     char buf[1024];
@@ -403,6 +411,7 @@ void cat(int client, FILE *resource)
 /**********************************************************************/
 void execute_cgi(int client, const char *path, const char *method, const char *query_string)
 {
+    printf("enter cgi\n");
     char buf[1024];
     int cgi_output[2];
     int cgi_input[2];
