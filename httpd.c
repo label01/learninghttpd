@@ -330,16 +330,40 @@ void send_file_to_client(int client_fd, const char *file_path)
  * Parameters: the client socket descriptor
  *             FILE pointer for the file to cat */
 /**********************************************************************/
-void cat(int client, FILE *resource)
+void cat(int client_fd, FILE *resource)
 {
-    char buf[1024];
-    fgets(buf, sizeof(buf), resource);
-    while (!feof(resource))
-    {
-        /* code */
-        send(client, buf, strlen(buf), 0);
-        fgets(buf, sizeof(buf), resource);
+    /**
+     * 声明一个nread变量，用于记录fread函数返回的字节数；
+     * 在函数开头对资源文件是否存在的检查，如果资源文件无法打开或读取，则调用not_found函数返回HTTP 404错误
+     * 将读取文件的方式从fgets改为fread，这样可以避免读取过程中的换行符，同时也可以读取二进制文件。
+     * 在读取文件的循环中，每次读取的字节数由fread函数返回，可以避免因为buf缓冲区大小不够而发生截断现象。
+     * 在循环中添加了发送数据到客户端的操作，并在发送失败时打印错误信息。
+     * 循环结束后，检查是否在读取文件过程中发生了错误，如果由则打印错误信息。
+    */
+    char buf[1024]; //缓存区
+    //使用size_t，不能表示负数，避免了使用负数或者溢出的风险，提高程序的健壮性和可移植性
+    size_t nread = 0; //读取的字节数
+
+    //判断文件是否存在
+    if (!resource){
+        not_found(client_fd);
+        return;
     }
+    //循环读取文件内容并发送到客户端
+    while ((nread = fread(buf, 1, sizeof(buf), resource)) > 0){
+        //判断发送是否成功
+        if (send(client_fd, buf, nread, 0) == -1){
+            perror("send");
+            return;
+        }
+    }
+
+    //判断读取是否出错
+    if (ferror(resource)){
+        perror("fread");//出错打印错误信息
+        return;
+    }
+
 }
 
 /**********************************************************************/
