@@ -38,9 +38,10 @@ void not_found(int);
 void send_file_to_client(int, const char *);
 void send_response_header(int ,const char *);
 void cat(int, FILE *);
-void execute_cgi(int, const char *, const char*, const char *);
+void execute_cgi(int, const char *, const char *, const char *);
 void bad_request(int);
 void cannot_execute(int);
+void send_response(int, const char *, const char *, const char *);
 
 /**********************************************************************/
 /* This function starts the process of listening for web connections
@@ -279,59 +280,7 @@ int get_line(int sock, char *buf, int size)
     return(i);
 }
 
-/**********************************************************************/
-/* Inform the client that the requested web method has not been
- * implemented.
- * Parameter: the client socket */
-/**********************************************************************/
-void unimplemented(int client)
-{
-    char buf[1024];
 
-    sprintf(buf, "HTTP/1.0 501 Method Not Implemented\r\n");
-    send(client, buf, strlen(buf), 0);
-    sprintf(buf, SERVER_STRING);
-    send(client, buf, strlen(buf), 0);
-    sprintf(buf, "Content-Type: text/html\r\n");
-    send(client, buf, strlen(buf), 0);
-    sprintf(buf, "\r\n");
-    send(client, buf, strlen(buf), 0);
-    sprintf(buf, "<HTML><HEAD><TITLE>Method Not Implemented\r\n");
-    send(client, buf, strlen(buf), 0);
-    sprintf(buf, "</TITLE></HEAD>\r\n");
-    send(client, buf, strlen(buf), 0);
-    sprintf(buf, "<BODY><P>HTTP request method not supported. \r\n");
-    send(client, buf, strlen(buf), 0);
-    sprintf(buf, "</BODY></HTML>\r\n");
-    send(client, buf, strlen(buf), 0);
-
-}
-/**********************************************************************/
-/* Give a client a 404 not found status message. */
-/**********************************************************************/
-void not_found(int client){
-    char buf[1024];
-
-    sprintf(buf, "HTTP/1.0 404 NOT FOUND\r\n");
-    send(client, buf, strlen(buf), 0);
-    sprintf(buf, SERVER_STRING);
-    send(client, buf, strlen(buf), 0);
-    sprintf(buf, "Content-Type: text/html\r\n");
-    send(client, buf, strlen(buf), 0);
-    sprintf(buf, "\r\n");
-    send(client, buf, strlen(buf), 0);
-    sprintf(buf, "<HTML><TITLE> NOT Found </TITLE> \r\n" );
-    send(client, buf, strlen(buf), 0);
-    sprintf(buf, "<BODY><P> The server could not fulfill\r\n");
-    send(client, buf, strlen(buf), 0);
-    sprintf(buf, "your request because the resource specified\r\n");
-    send(client, buf, strlen(buf), 0);
-    sprintf(buf, "is unavailable or nonexistent.\r\n");
-    send(client, buf, strlen(buf), 0);
-    sprintf(buf, "</BODY></HTML> \r\n");
-    send(client, buf, strlen(buf), 0);
-
-}
 /**********************************************************************/
 /* Send a regular file to the client.  Use headers, and report
  * errors to client if they occur.
@@ -373,25 +322,7 @@ void send_file_to_client(int client_fd, const char *file_path)
 }
 
 
-/**********************************************************************/
-/* Return the informational HTTP headers about a file. */
-/* Parameters: the socket to print the headers on
- *             the name of the file */
-/**********************************************************************/
-void send_response_header(int client_fd, const char *file_path)
-{
-    char buf[1024];
-    (void)file_path;
 
-    strcpy(buf, "HTTP/1.0 200 OK\r\n");
-    send(client_fd, buf, strlen(buf), 0);
-    strcpy(buf, SERVER_STRING);
-    send(client_fd, buf, strlen(buf), 0);
-    sprintf(buf, "Content-Type: text/html\r\n");
-    send(client_fd, buf, strlen(buf), 0);
-    strcpy(buf, "\r\n");
-    send(client_fd, buf, strlen(buf), 0);
-}
 /**********************************************************************/
 /* Put the entire contents of a file out on a socket.  This function
  * is named after the UNIX "cat" command, because it might have been
@@ -514,38 +445,91 @@ void execute_cgi(int client, const char *path, const char *method, const char *q
 
 
 /**********************************************************************/
+/*
+*函数名：send_respose
+*作用：该函数用于向客户端发送HTTP响应
+*参数：
+*client_fd:int类型，表示客户端的socket文件描述符
+*status:const char*类型，表示HTTP响应状态码，例如“200 OK”
+*content_type:const char*类型，表示HTTP响应内容类型，例如“text/html"
+*body:const char*类型，表示HTTP响应体，即要返回给客户端的数据
+*逻辑：该函数首先根据参数拼接HTTP响应报文的头部信息，包括响应状态码、服务器信息、内容类型等；
+*然后将HTTP响应体拼接到头部信息之后，并将整个HTTP响应报文通过客户端的socket文件描述符发送
+*给客户端。
+*/
+/**********************************************************************/
+void send_response(int client_fd, const char *status, const char *content_type, const char *body){
+    char response[1024];
+    //使用snprintf代替sprintf,避免缓冲区溢出
+    //snprintf会检查缓冲区剩余空间是否足够存储待写入的数据，保证程序的健壮性
+    //这里第二个参数表示缓冲区大小，比原来的1024要小一些，可以根据实际情况调整大小
+    snprintf(response, sizeof(response), "HTTP/1.0 %s\r\n", status);
+    //使用%s格式化字符串直接将SERVER_STRING添加到response末尾
+    /*在这行代码中，第一个参数 response + strlen(response) 的作用是将 response 的指针移动到未被填充的区域的开头。
+    在第一次调用 sprintf 后，response 数组中已经包含了响应的状态行和服务器信息。所以我们需要将指针移动到已经填充的区域的末尾，
+    以便继续添加响应头和响应体。具体来说，response + strlen(response) 表示 response 数组中已经填充的部分的末尾位置，
+    然后 sizeof(response) - strlen(response) 表示未填充的空间的大小，这样保证了后续的写入操作不会越界。
+    需要注意的是，由于使用了 sizeof 运算符，因此在使用 snprintf 时，我们不需要手动指定缓冲区的大小，而是可以让编译器根据数组类型自动计算。
+    这样可以避免手动计算大小时出现的错误，提高代码的可读性和可维护性。另外，使用 snprintf 而不是 sprintf，可以避免缓冲区溢出导致的安全问题，
+    因为 snprintf 会在写入数据时自动检查缓冲区大小，如果溢出则会自动截断。*/
+    snprintf(response + strlen(response), sizeof(response) - strlen(response), SERVER_STRING);
+    snprintf(response + strlen(response), sizeof(response) - strlen(response), "Content-Type: %s\r\n", content_type);
+    snprintf(response + strlen(response), sizeof(response) - strlen(response), "\r\n");
+    snprintf(response + strlen(response), sizeof(response) - strlen(response), "%s", body);
+
+    //发送响应
+    send(client_fd, response, strlen(response), 0);
+
+}
+
+/**********************************************************************/
+/* Inform the client that the requested web method has not been
+ * implemented.
+ * Parameter: the client socket */
+/**********************************************************************/
+void unimplemented(int client_fd)
+{
+    //返回501 Method Not Implemented响应
+    send_response(client_fd, "501 Method Not Implemented", "text/html", "<HTML><HEAD><TITLE>Method Not Implemented\r\n</TITLE></HEAD>\r\n<BODY><P>HTTP request method not supported.\r\n</BODY></HTML>\r\n");
+}
+/**********************************************************************/
+/* Give a client a 404 not found status message. */
+/**********************************************************************/
+void not_found(int client_fd){
+   //返回404 NOT FOUND响应
+   send_response(client_fd, "404 NOT FOUND", "text/html", "<HTML><HEAD><TITLE>NOT Found</TITLE></HEAD>\r\n<BODY><P>The server could not fulfill your request because the resource specified is unavailable or nonexistent.\r\n</BODY></HTML>\r\n");
+}
+
+/**********************************************************************/
+/* Return the informational HTTP headers about a file. */
+/* Parameters: the socket to print the headers on
+ *             the name of the file */
+/**********************************************************************/
+void send_response_header(int client_fd, const char *file_path)
+{
+    (void)file_path;
+    //发牛200 OK响应
+    send_response(client_fd, "200 OK", "text/html", "");
+}
+
+/**********************************************************************/
 /* Inform the client that a request it has made has a problem.
  * Parameters: client socket */
 /**********************************************************************/
-void bad_request(int client)
+void bad_request(int client_fd)
 {
-    char buf[1024];
-    sprintf(buf, "HTTP/1.0 400 BAD REQUEST\r\n");
-    send(client, buf, sizeof(buf), 0);
-    sprintf(buf, "Content-type: text/html\r\n");
-    send(client, buf, sizeof(buf), 0);
-    sprintf(buf, "\r\n");
-    send(client, buf, sizeof(buf), 0);
-    sprintf(buf, "<P>Your borowser sent a bad request, ");
-    send(client, buf, sizeof(buf), 0);
-    sprintf(buf, "such as a POST without a Content-Length.\r\n");
-    send(client, buf, sizeof(buf), 0);
+    //返回400 BAD REQUEST响应
+    send_response(client_fd, "400 BAD REQUEST", "text/html", "<P>Your browser sent a bad request, such as a POST without a Content-Length.\r\n");
+
 }
 /**********************************************************************/
 /* Inform the client that a CGI script could not be executed.
  * Parameter: the client socket descriptor. */
 /**********************************************************************/
-void cannot_execute(int client)
+void cannot_execute(int client_fd)
 {
-    char buf[1024];
-    sprintf(buf, "HTTP/1.0 500 Internal Server Error\r\n");
-    send(client, buf, strlen(buf), 0);
-    sprintf(buf, "Content-type: text/html\r\n");
-    send(client, buf, strlen(buf), 0);
-    sprintf(buf, "\r\n");
-    send(client, buf, strlen(buf), 0);
-    sprintf(buf, "<P>Error prohibited CGI execution.\r\n");
-    send(client, buf, strlen(buf), 0);
+    //返回500 Internal Server Error 响应
+    send_response(client_fd, "500 Internal Server Error", "text/html", "<P>Error prohibited CGI execution.\r\n");
 }
 
 int main(void){
