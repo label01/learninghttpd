@@ -35,8 +35,8 @@ void accept_request(int);
 int get_line(int, char *, int);
 void unimplemented(int);
 void not_found(int);
-void serve_file(int, const char *);
-void headers(int ,const char *);
+void send_file_to_client(int, const char *);
+void send_response_header(int ,const char *);
 void cat(int, FILE *);
 void execute_cgi(int, const char *, const char*, const char *);
 void bad_request(int);
@@ -206,7 +206,7 @@ void accept_request(int client_fd){
         }
         if (!cgi)
         {
-            serve_file(client_fd, path);
+            send_file_to_client(client_fd, path);
         }
         else{
             execute_cgi(client_fd, path, method, query_string);
@@ -339,29 +339,37 @@ void not_found(int client){
  *              file descriptor
  *             the name of the file to serve */
 /**********************************************************************/
-void serve_file(int client, const char *filename)
+void send_file_to_client(int client_fd, const char *file_path)
 {
-    printf("enter the serve file\n");
-    FILE *resource = NULL;
-    int numchars = 1;
-    char buf[1024];
-
+    //定义缓冲区大小
+    const int buf_size = 1024;
+    //定义缓冲区
+    char buf[buf_size];
+    //初始化缓冲区第一个字符
     buf[0] = 'A';
     buf[1] = '\0';
-    while ((numchars > 0) && strcmp("\n", buf))
+
+    //跳过请求头
+    int numchars = 1;
+    while ((numchars > 0) && strcmp("\n", buf) != 0)
     {
-        numchars = get_line(client, buf, sizeof(buf));
+        numchars = get_line(client_fd, buf, buf_size);
     }
-    resource = fopen(filename, "r");
-    if (resource == NULL)
+
+    //打开文件并发送
+    FILE *file = fopen(file_path, "r");
+    if (file == NULL)
     {
-        not_found(client);
+        not_found(client_fd);
+        fprintf(stderr, "Failed to open file %s\n", file_path);
     }
     else{
-        headers(client, filename);
-        cat(client, resource);
+        //发送响应头
+        send_response_header(client_fd, file_path);
+        cat(client_fd, file);
     }
-    fclose(resource);
+    //关闭文件
+    fclose(file);
 }
 
 
@@ -370,19 +378,19 @@ void serve_file(int client, const char *filename)
 /* Parameters: the socket to print the headers on
  *             the name of the file */
 /**********************************************************************/
-void headers(int client, const char *filename)
+void send_response_header(int client_fd, const char *file_path)
 {
     char buf[1024];
-    (void)filename;
+    (void)file_path;
 
     strcpy(buf, "HTTP/1.0 200 OK\r\n");
-    send(client, buf, strlen(buf), 0);
+    send(client_fd, buf, strlen(buf), 0);
     strcpy(buf, SERVER_STRING);
-    send(client, buf, strlen(buf), 0);
+    send(client_fd, buf, strlen(buf), 0);
     sprintf(buf, "Content-Type: text/html\r\n");
-    send(client, buf, strlen(buf), 0);
+    send(client_fd, buf, strlen(buf), 0);
     strcpy(buf, "\r\n");
-    send(client, buf, strlen(buf), 0);
+    send(client_fd, buf, strlen(buf), 0);
 }
 /**********************************************************************/
 /* Put the entire contents of a file out on a socket.  This function
