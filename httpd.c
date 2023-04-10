@@ -372,97 +372,143 @@ void cat(int client_fd, FILE *resource)
  * Parameters: client socket descriptor
  *             path to the CGI script */
 /**********************************************************************/
-void execute_cgi(int client, const char *path, const char *method, const char *query_string)
+void execute_cgi(int client_fd, const char *path, const char *method, const char *query_string)
 {
-    printf("enter cgi\n");
-    char buf[1024];
-    int cgi_output[2];
-    int cgi_input[2];
-    pid_t pid;
-    int status;
-    int i;
-    char c;
-    int numchars = 1;
-    int content_length = -1;
+    char buf[1024]; 
+    int cgi_output[2]; //cgi脚本标准输出管道
+    int cgi_input[2]; //cgi脚本标准输入管道
+    pid_t pid; //进程ID
+    int status;//状态码
+    int loop_index;//用于循环计数的索引
+    char current_char;//用于读取或发送单个字符
+    int num_char = 1;//用于存储或读取每次发送的字节数
+    int content_length = -1; //请求体长度
 
+    //保证buf数组非空
     buf[0] = 'A';
+    //初始化buf数组
     buf[1] = '\0';
     if (strcasecmp(method, "GET") == 0)
     {
-        while ((numchars > 0) && strcmp("\n", buf))
+        while ((num_char > 0) && strcmp("\n", buf))
         {
-            numchars = get_line(client, buf, sizeof(buf));
+            num_char = get_line(client_fd, buf, sizeof(buf));
         }
     }
     else{
-        numchars = get_line(client, buf, sizeof(buf));
-        while ((numchars > 0) && strcmp("\n", buf))
+        num_char = get_line(client_fd, buf, sizeof(buf));
+        //strcmp 函数会将两个字符串逐个字符地比较，若在某个位置两个字符不同，
+        //就会根据这个位置上两个字符的 ASCII 码值大小关系返回一个负数或正数，若两个字符串完全相同，
+        //则返回 0。因此，只要传入的两个字符串在某一位置上的字符不相同，strcmp 就会返回大于零的值。
+        while ((num_char > 0) && strcmp("\n", buf))
         {
+            //之所以将buf数组中的第16个元素设置为'\0',就是为了去除HTTP请求头"Content-Length:"
+            //后面跟着的空白字符,从而方便提取Content-Length的值.因为这些字符可能会影响atoi函数的解析结果.
             buf[15] = '\0';
             if (strcasecmp(buf, "Content-Length:") == 0)
             {
                 content_length = atoi(&(buf[16]));
             }
-            numchars = get_line(client, buf, sizeof(buf));
+            num_char = get_line(client_fd, buf, sizeof(buf));
         }
         if (content_length == -1){
-            bad_request(client);
+            bad_request(client_fd);
             return;
         }
     }
-    sprintf(buf, "HTTP/1.0 200 OK\r\n");
-    send(client, buf, strlen(buf), 0);
+    send_response(client_fd, "200 OK", "text/html", "");
+    //创建两个管道,用于父进程和子进程间通信
+    if (pipe(cgi_output) < 0 || pipe(cgi_input) < 0){
+
+    }
 
     if (pipe(cgi_output) < 0){
-        cannot_execute(client);
+        cannot_execute(client_fd);
         return;
     }
     if (pipe(cgi_input) < 0){
-        cannot_execute(client);
+        cannot_execute(client_fd);
         return;
     }
 
     if ((pid = fork()) < 0){
-        cannot_execute(client);
+        cannot_execute(client_fd);
         return;
     }
+    //子进程
     if (pid == 0){
-        char meth_env[255];
-        char query_env[255];
-        char length_env[255];
+        //定义环境变量字符串
+        // char meth_env[255];
+        // char query_env[255];
+        // char length_env[255];
 
-        dup2(cgi_output[1], 1);
-        dup2(cgi_input[0], 0);
+        //重定义管道读写端
+        dup2(cgi_output[1], STDOUT_FILENO);
+        dup2(cgi_input[0], STDIN_FILENO);
+        //关闭无用的管道
         close(cgi_output[0]);
         close(cgi_input[1]);
-        sprintf(meth_env, "REQUEST_METHOD=%s", method);
-        putenv(meth_env);
+        //设置环境变量，便于CGI程序获取请求信息
+        
+        //原程序，使用setenv函数替换putenv函数可以提高代码的可读性和安全性
+        //setenv函数会检查传入的环境变量和值的长度，可以更加安全地设置环境变量
+        /*sprintf(meth_env, "REQUEST_METHOD=%s", method);
+        putenv(meth_env);*/
+        setenv("REQUEST_METHOD", method, 1);
         if (strcasecmp(method, "GET") == 0){
-            sprintf(query_env, "QUERY_STRING=%s", query_string);
-            putenv(query_env);
+            //原程序使用sprintf方法拼接后的字符串，可能回包含特殊字符，例如空格
+            //和换行符，这可能导致在处理环境变量的时候出现问题。而setenv函数可以直接
+            //设置键值对，不需要通过字符串拼接，因此可以避免这些问题。此外，putenv的缺陷
+            //是存在相同变量名时会覆盖原来的值，而 setenv可以设置标志位来控制是否覆盖原来的值，
+            //我们这里标志位设为1，会覆盖掉原来的值
+            /*sprintf(query_env, "QUERY_STRING=%s", query_string);
+            putenv(query_env);*/
+            setenv("QUERY_STRING", query_string, 1);
         }
         else{
-            sprintf(length_env, "CONTENT_LENGTH=%d", content_length);
-            putenv(length_env);
+            // sprintf(length_env, "CONTENT_LENGTH=%d", content_length);
+            // putenv(length_env);
+            /**
+             * 这里说一下，这里和前面修改的不同之处，为什么要加一个content_length_str变量，因为content_length
+             * 不能直接作为环境变量的值。环境变量的值必须是字符串类型。所以用snprintf对content_length_str进行赋值；
+             * 此外snprintf函数会将指定格式的字符串输出到缓冲区中，如果缓冲区有值，则会被覆盖，所以可以不用对
+             * content_length_str进行初始化。同时还可以避免缓冲区溢出的风险。
+            */
+            char content_length_str[32];
+            snprintf(content_length_str, sizeof(content_length_str), "%d", content_length);
+            setenv("CONTENT_LENGTH", content_length_str, 1);
         }
+        //在子进程中执行CGI程序
         execl(path, path, NULL);
         exit(0);
     }else{
+        //父进程
+        //关闭无用的管道
         close(cgi_output[1]);
         close(cgi_input[0]);
+        //如果POST请求，读取请求体并写入管道
         if (strcasecmp(method, "POST") == 0)
         {
-            for (i = 0; i < content_length; i++){
-                recv(client, &c, 1, 0);
-                write(cgi_input[1], &c, 1);
+            for (loop_index = 0; loop_index < content_length; loop_index++){
+                if (recv(client_fd, &current_char, 1, 0) < 1){
+                    break;
+                }
+                if (write(cgi_input[1], &current_char, 1) < 1){
+                    break;
+                }
             }
         }
-        while (read(cgi_output[0], &c, 1) > 0)
+        // 从管道读取CGI程序的输出， 并发送给客户端
+        while (read(cgi_output[0], &current_char, 1) > 0)
         {
-            send(client, &c, 1, 0);
+            if(send(client_fd, &current_char, 1, 0) < 1){
+                break;
+            }
         }
+        //关闭管道
         close(cgi_output[0]);
         close(cgi_input[1]);
+        //等待子进程结束
         waitpid(pid, &status, 0);
     }
 }
