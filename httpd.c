@@ -371,6 +371,29 @@ void cat(int client_fd, FILE *resource)
  * appropriate.
  * Parameters: client socket descriptor
  *             path to the CGI script */
+/*
+                                +--------+         +--------+
+                                | parent |         |  child |
+                                +--------+         +--------+
+                                    |                   |
+                                    |                   |
+                                    |                   |
++-------------+     data     +-------------+     data     +-------------+
+| client data | ----------> | parent pipe | ----------> | child pipe  |
++-------------+             +-------------+             +-------------+
+                                    |                   |
+                                    |                   |
+                                    |                   |
++-------------+     output   +-------------+     input    +-------------+
+|  child out  | <---------- | parent pipe | <---------- |  child in  |
++-------------+             +-------------+             +-------------+
+                                    |                   |
+                                    |                   |
+                                    |                   |
+                                +--------+         +--------+
+                                | parent |         |  child |
+                                +--------+         +--------+
+*/
 /**********************************************************************/
 void execute_cgi(int client_fd, const char *path, const char *method, const char *query_string)
 {
@@ -418,19 +441,21 @@ void execute_cgi(int client_fd, const char *path, const char *method, const char
     }
     send_response(client_fd, "200 OK", "text/html", "");
     //创建两个管道,用于父进程和子进程间通信
+    /**
+     * pipe()是一个用于创建管道的系统调用。它创建了一个无名管道，该管道是一个半双工
+     * 的通信通道，其中的数据只能在一个方向上传输。
+     * 他的参数包含两个int类型的数组，其中pipefd[0]用于读取管道，pipefd[1]用于写入管道；
+     * 
+    */
     if (pipe(cgi_output) < 0 || pipe(cgi_input) < 0){
-
-    }
-
-    if (pipe(cgi_output) < 0){
         cannot_execute(client_fd);
         return;
     }
-    if (pipe(cgi_input) < 0){
-        cannot_execute(client_fd);
-        return;
-    }
-
+     /**
+     * 当我们创建一个子进程时，它会继承父进程的所有打开的文件描述符，包括管道。
+     * 所以在下述代码中，我们创建了两个管道，一个用于父进程向子进程传递
+     * 数据，另一个用于子进程向父进程传递数据。
+    */
     if ((pid = fork()) < 0){
         cannot_execute(client_fd);
         return;
@@ -443,6 +468,12 @@ void execute_cgi(int client_fd, const char *path, const char *method, const char
         // char length_env[255];
 
         //重定义管道读写端
+        /*子进程执行的CGI程序需要读取父进程传递过来的数据，
+        而父进程将数据写入到管道中的写端，子进程只需从管道的读端（'cgi_input[0]'）
+        中读取即可。通过重定向标准输入（STDIN_FILENO），子进程可以将从管道读取的数据
+        作为标准输入，这样CGI程序在读取标准输入时实际上就读取了从管道中传递过来的数据。
+        换言之，子进程在读取标准输入时，实际上就是在读取管道的读端。
+        */
         dup2(cgi_output[1], STDOUT_FILENO);
         dup2(cgi_input[0], STDIN_FILENO);
         //关闭无用的管道
@@ -484,6 +515,14 @@ void execute_cgi(int client_fd, const char *path, const char *method, const char
     }else{
         //父进程
         //关闭无用的管道
+        /**
+         * 在管道通信中，父进程和子进程通过管道进行通信。本质上时一种单向通信机制，
+         * 记住是单向通信机制，所以父进程只能往管道写数据，而子进程只能从管道读取数据。
+         * 为了实现双向通信，需要重新定义子进程的读写端。具体来说，就是父进程需要关闭
+         * 子进程的写端，子进程需要关闭父进程的读端。这样保证了父进程只能从管道中
+         * 读取数据，而子进程只能往管道中写数据。这样就实现了双向通信。
+         * 
+        */
         close(cgi_output[1]);
         close(cgi_input[0]);
         //如果POST请求，读取请求体并写入管道
@@ -508,7 +547,7 @@ void execute_cgi(int client_fd, const char *path, const char *method, const char
         //关闭管道
         close(cgi_output[0]);
         close(cgi_input[1]);
-        //等待子进程结束
+        //等待子进程结束，避免出现僵尸进程
         waitpid(pid, &status, 0);
     }
 }
