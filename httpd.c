@@ -453,6 +453,7 @@ void execute_cgi(int client_fd, const char *path, const char *method, const char
             {
                 content_length = atoi(&(buf[16]));
             }
+
             num_char = get_line(client_fd, buf, sizeof(buf));
         }
         if (content_length == -1){
@@ -546,6 +547,7 @@ void execute_cgi(int client_fd, const char *path, const char *method, const char
         */
         close(cgi_output[1]);
         close(cgi_input[0]);
+        char request_str[1024];
         //如果POST请求，读取请求体并写入管道
         if (strcasecmp(method, "POST") == 0)
         {
@@ -556,7 +558,11 @@ void execute_cgi(int client_fd, const char *path, const char *method, const char
                 if (write(cgi_input[1], &current_char, 1) < 1){
                     break;
                 }
+                request_str[loop_index] = current_char;
             }
+            //读取客户端请求并打印
+            request_str[loop_index] = '\0';
+            printf("client request string: %s\n", request_str);
         }
         // 从管道读取CGI程序的输出， 并发送给客户端
         while (read(cgi_output[0], &current_char, 1) > 0)

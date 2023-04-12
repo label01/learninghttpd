@@ -5,7 +5,7 @@ use CGI;
 
 my($cgi) = new CGI;
 
-print $cgi->header;
+print $cgi->header(-charset=>'UTF-8', -type=>'');
 my($color) = "blue";
 $color = $cgi->param('color') if defined $cgi->param('color');
 
