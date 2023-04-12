@@ -642,29 +642,29 @@ void cannot_execute(int client_fd)
 }
 
 int main(void){
-    int server_sock = -1;
-    uint16_t port = 0;
-    int client_sock = -1;
-    int costnum = 0;
-    struct sockaddr_in client_name;
-    socklen_t client_name_len = sizeof(client_name);
+    int server_sock = -1; //服务器套接字描述符
+    uint16_t port = 0; //监听的端口号
+    int client_sock = -1; //客户端套接字描述符
+    int costnum = 0; //连接的客户端数量
+    struct sockaddr_in client_name; //客户端信息结构体
+    socklen_t client_name_len = sizeof(client_name); //客户端信息结构体大小
 
-    server_sock = startup(&port);
-    printf("httpd running on port %d\n", port);
+    server_sock = startup(&port); // 创建套接字， 绑定端口
+    printf("httpd running on port %d\n", port); // 打印服务器信息
 
-    while(1){
+    while(1){ //服务器一直运行
         client_sock = accept(server_sock,
                        (struct sockaddr *)&client_name,
-                       &client_name_len);
-        costnum++;
-        if(client_sock == -1){
+                       &client_name_len); //接受客户端连接
+        costnum++;//记录连接客户端的数量
+        if(client_sock == -1){ //如果连接失败，输出错误信息
             error_die("accept");
         }
-        accept_request(client_sock);
-        close(client_sock);
+        accept_request(client_sock); //处理客户端请求
+        close(client_sock); //关闭客户端套接字
     }
 
-    close(server_sock);
+    close(server_sock); // 关闭服务器套接字
 
     return(0);
 
