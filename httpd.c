@@ -101,8 +101,7 @@ void error_die(const char *sc){
  * Parameters: the socket connected to the client */
 /**********************************************************************/
 void accept_request(int client_fd){
-    printf("enter accept_request");
-
+    // 定义变量
     char request[MAX_REQUEST_SIZE];
     //初始化request字符串
     memset(request, 0, MAX_REQUEST_SIZE);
@@ -113,6 +112,7 @@ void accept_request(int client_fd){
         perror("Failed to receive request\n");
         return;
     }
+    //初始化method、url、path字符串
     char method[MAX_METHOD_SIZE];
     char url[MAX_URL_SIZE];
     char path[MAX_PATH_SIZE];
@@ -124,10 +124,11 @@ void accept_request(int client_fd){
     size_t i, j;
     struct stat st;
     /*becomes true if server decides this is a CGI program*/
-    int cgi = 0;
-    char *query_string = NULL;
+    int cgi = 0;//标识是否为CGI程序，默认为0
+    char *query_string = NULL;// 存储查询字符串的指针
     i = 0;
     j = 0;
+    //读取请求方法
     while(!ISspace(request[j]) && ( i < sizeof(method) - 1))
     {
         method[i] = request[j];
@@ -136,15 +137,15 @@ void accept_request(int client_fd){
     }
     method[i] = '\0';
     //printf("the method is %s\n", method);
+    //如果不是GET或POST方法
     if (strcasecmp(method, "GET") && strcasecmp(method, "POST"))
     {
-        unimplemented(client_fd);
+        unimplemented(client_fd); // 发送501未实现错误给客户端
         return;
     }
 
     if (strcasecmp(method, "POST") == 0)
     {
-        printf("this is post ,cgi = 1\n");
         cgi = 1;
     }
     i = 0;
@@ -160,55 +161,75 @@ void accept_request(int client_fd){
     }
     url[i] = '\0';
     //printf("the url is %s\n", url);
-    //处理查询字符
+    //处理查询字符，如果是GET方法
     if (strcasecmp(method, "GET") == 0)
     {
         query_string = url;
+        //定位到字符串末尾
         while (*query_string != '\0'){
             query_string++;
         }
+        //找到查询字符串的起始位置
         while ((*query_string != '?') && (*query_string != '\0'))
         {
             query_string++;
         }
+        //如果找到了查询字符串
         if (*query_string == '?')
         {
             //printf("enter GET, the cgi = 1\n");
-            cgi = 1;
-            *query_string = '\0';
-            query_string++;
+            cgi = 1; //标识为CGI程序
+            *query_string = '\0';  //将？字符替换为字符结束符
+            query_string++;//指向查询字符串
         }
         
     }
-    sprintf(path, "htdocs%s", url);
+    sprintf(path, "htdocs%s", url); //拼接文件路径
     //printf("the sprintf string is  %s\n", path);
-    
+    //如果路径最后一个字符是'/'， 则默认请求的是该目录下的index.html文件
     if (path[strlen(path) -1] == '/')
     {
         strcat(path, "index.html");
     }
+    //如果文件不存在
     if (stat(path, &st) == -1){
+        //跳过请求头
+        /**
+        *这段代码中，如果文件不存在，程序会跳过请求头，是为了防止在发送404页面之前
+        *客户端可能已经发送了一些请求数据（例如POST请求的数据），而这些数据并不应该
+        *被处理。因此， 这里先通过while循环读取请求头中的每一行，直到读取到一个空行
+        *（表示请求头结束），或者读取到了所有的请求头，这样可以确保在发送404页面之前，
+        *已经读取并清除了客户端发送的请求数据。
+        *
+        *只有当请求头读取完毕，服务器才能够准确地发送404页面，而不会把客户端地请求数据
+        *也一并发送过去。
+        */
         while ((request_len > 0) && strcmp("\n", request))
         {
             request_len = get_line(client_fd, request, sizeof(request));
         }
+        //返回404错误页面
         not_found(client_fd);
     }
     else{
+        //如果请求的是目录的话，则打开该目录下的index.html文件
         if ((st.st_mode & S_IFMT) == S_IFDIR)
         {
             strcat(path, "/index.html");
         }
+        //判断文件是否可执行，若是则为CGI程序，需要执行
         if ((st.st_mode & S_IXUSR) || 
             (st.st_mode & S_IXGRP) ||
             (st.st_mode & S_IXOTH) )
         {
             cgi = 1;
         }
+        //如果不是cgi程序,将文件内容返回给客户端
         if (!cgi)
         {
             send_file_to_client(client_fd, path);
         }
+        //如果是CGI程序，执行该程序并将结果返回给客户端
         else{
             execute_cgi(client_fd, path, method, query_string);
         }
