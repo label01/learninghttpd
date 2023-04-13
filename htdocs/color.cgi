@@ -5,6 +5,7 @@ use CGI;
 
 my($cgi) = new CGI;
 
+#增加-charset=>'UTF-8',-type=>''，是为了去除页面出现的一串字符：Content-Type: text/html; charset=ISO-8859-1
 print $cgi->header(-charset=>'UTF-8', -type=>'');
 my($color) = "blue";
 $color = $cgi->param('color') if defined $cgi->param('color');
