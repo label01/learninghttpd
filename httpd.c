@@ -28,6 +28,8 @@
 #define MAX_URL_SIZE 2048
 #define MAX_PATH_SIZE 4096
 
+#define SERVER_PORT 8080
+
 
 int startup(uint16_t *);
 void error_die(const char *);
@@ -53,38 +55,48 @@ void send_response(int, const char *, const char *, const char *);
 /**********************************************************************/
 int startup(uint16_t *port)
 {
-    int server_socket = 0;
-    struct sockaddr_in server_addr;
+    int server_socket = 0; //定义服务器socket的文件描述符
+    struct sockaddr_in server_addr; //定义服务器的地址信息结构体
 
+    /**
+     * 创建一个IPV4的TCP socket，如果创建失败，输出错误信息
+    */
     server_socket = socket(PF_INET, SOCK_STREAM, 0);
     if (server_socket == -1)
     {
         error_die("socket");
     }
-    memset(&server_addr, 0, sizeof(server_addr));
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_port = htons(*port);
-    server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    
+    memset(&server_addr, 0, sizeof(server_addr));//将server_addr清零
+    server_addr.sin_family = AF_INET;//设置协议族为IPV4
+    server_addr.sin_port = htons(*port); //设置端口号，将主机字节序转为网络字节序
+    /**
+     * 设置IP地址为INADDR_ANY，即可以接受任何IP地址的连接
+     * 当然如果不修改这句代码，这个HTTP服务器只能被本地主机访问，其他主机无法访问。
+    */
+    server_addr.sin_addr.s_addr = htonl(INADDR_ANY); 
     if (bind(server_socket, (struct sockaddr *)&server_addr, sizeof(server_addr)) == -1)
     {
         error_die("bind");
     }
-    if (*port == 0)
+    if (*port == 0)//如果没有指定端口号，那么随机分配一个端口号
     {
+        //获取server_addr结构体的大小
         socklen_t server_len = sizeof(server_addr);
+        //获取绑定的socket的地址信息
         if(getsockname(server_socket, (struct sockaddr *)&server_addr, &server_len) == -1)
         {
             error_die("getsockname");
         }
-        *port = ntohs(server_addr.sin_port);
+        *port = ntohs(server_addr.sin_port);//将网络字节序转换为主机字节序，得到分配的端口号
     }
+    //监听socket，等待客户端连接
     if (listen(server_socket, 5) == -1)
     {
         error_die("listen");
     }
+    //返回socket的文件描述符
     return(server_socket);    
-        
-
 }
 /**********************************************************************/
 /* Print out an error message with perror() (for system errors; based
@@ -670,7 +682,7 @@ void cannot_execute(int client_fd)
 
 int main(void){
     int server_sock = -1; //服务器套接字描述符
-    uint16_t port = 0; //监听的端口号
+    uint16_t port = SERVER_PORT; //监听的端口号
     int client_sock = -1; //客户端套接字描述符
     int costnum = 0; //连接的客户端数量
     struct sockaddr_in client_name; //客户端信息结构体
