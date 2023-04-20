@@ -27,9 +27,10 @@
 #define MAX_METHOD_SIZE 255
 #define MAX_URL_SIZE 2048
 #define MAX_PATH_SIZE 4096
-
+// 固定服务器端口号
 #define SERVER_PORT 8080
-
+//固定服务器IP
+#define SERVER_IP "192.168.200.5"
 
 int startup(uint16_t *);
 void error_die(const char *);
@@ -74,7 +75,14 @@ int startup(uint16_t *port)
      * 设置IP地址为INADDR_ANY，即可以接受任何IP地址的连接
      * 当然如果不修改这句代码，这个HTTP服务器只能被本地主机访问，其他主机无法访问。
     */
-    server_addr.sin_addr.s_addr = htonl(INADDR_ANY); 
+    //server_addr.sin_addr.s_addr = htonl(INADDR_ANY); 
+    server_addr.sin_addr.s_addr = inet_addr(SERVER_IP);
+    /**
+     * 在linux系统下低于1024的端口被保留给root用户，只有root用户才能绑定这些端口。
+     * 如果使用的是非特权端口（大于1024），但仍然遇到了“bind:Permission denied"
+     * 错误，可能是由于端口已被其他程序占用而导致的。可以使用‘netstat -tlnp’命令
+     * 查看端口占用情况，找出占用该端口的程序并将其停止或修改端口。
+    */
     if (bind(server_socket, (struct sockaddr *)&server_addr, sizeof(server_addr)) == -1)
     {
         error_die("bind");
